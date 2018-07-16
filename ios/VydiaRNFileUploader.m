@@ -269,6 +269,7 @@ RCT_EXPORT_METHOD(cancelUpload: (NSString *)cancelUploadId resolve:(RCTPromiseRe
 - (NSURLSession *)urlSession {
     if (_urlSession == nil) {
         NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:BACKGROUND_SESSION_ID];
+        backgroundConfigurationObject.waitsForConnectivity = YES; 
         _urlSession = [NSURLSession sessionWithConfiguration:sessionConfiguration delegate:self delegateQueue:nil];
     }
 
