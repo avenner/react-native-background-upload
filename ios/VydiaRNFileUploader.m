@@ -6,7 +6,7 @@
 
 @interface VydiaRNFileUploader : RCTEventEmitter <RCTBridgeModule, NSURLSessionTaskDelegate>
 {
-  NSMutableDictionary *_responsesData;
+    NSMutableDictionary *_responsesData;
 }
 @end
 
@@ -25,27 +25,27 @@ NSURLSession *_urlSession = nil;
 }
 
 -(id) init {
-  self = [super init];
-  if (self) {
-    staticEventEmitter = self;
-    _responsesData = [NSMutableDictionary dictionary];
-  }
-  return self;
+    self = [super init];
+    if (self) {
+        staticEventEmitter = self;
+        _responsesData = [NSMutableDictionary dictionary];
+    }
+    return self;
 }
 
 - (void)_sendEventWithName:(NSString *)eventName body:(id)body {
-  if (staticEventEmitter == nil)
-    return;
-  [staticEventEmitter sendEventWithName:eventName body:body];
+    if (staticEventEmitter == nil)
+        return;
+    [staticEventEmitter sendEventWithName:eventName body:body];
 }
 
 - (NSArray<NSString *> *)supportedEvents {
     return @[
-        @"RNFileUploader-progress",
-        @"RNFileUploader-error",
-        @"RNFileUploader-cancelled",
-        @"RNFileUploader-completed"
-    ];
+             @"RNFileUploader-progress",
+             @"RNFileUploader-error",
+             @"RNFileUploader-cancelled",
+             @"RNFileUploader-completed"
+             ];
 }
 
 /*
@@ -66,23 +66,35 @@ RCT_EXPORT_METHOD(startUpload:(NSDictionary *)options resolve:(RCTPromiseResolve
     {
         thisUploadId = uploadId++;
     }
-
+    
     NSString *uploadUrl = options[@"url"];
     NSString *method = options[@"method"] ?: @"POST";
-    NSString *fieldName = options[@"field"];
     NSString *customUploadId = options[@"customUploadId"];
     NSDictionary *headers = options[@"headers"];
     NSDictionary *parameters = options[@"parameters"];
-
+    
     @try {
-        NSURL *requestUrl = [NSURL URLWithString: uploadUrl];
+        NSURL *requestUrl;
+        
+        if([method isEqualToString:@"POST"] || [method isEqualToString:@"PUT"]){
+            requestUrl = [NSURL URLWithString: uploadUrl];
+        } else {
+            NSURLComponents *components = [NSURLComponents componentsWithString:uploadUrl];
+            NSMutableArray *queryItems = [NSMutableArray array];
+            for (NSString *key in parameters) {
+                [queryItems addObject:[NSURLQueryItem queryItemWithName:key value:parameters[key]]];
+            }
+            components.queryItems = queryItems;
+            requestUrl = components.URL;
+        }
+        
         if (requestUrl == nil) {
-            @throw @"Request cannot be nil";
+          @throw @"Request cannot be nil";
         }
         
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:requestUrl];
         [request setHTTPMethod: method];
-
+        
         [headers enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull val, BOOL * _Nonnull stop) {
             if ([val respondsToSelector:@selector(stringValue)]) {
                 val = [val stringValue];
@@ -91,13 +103,32 @@ RCT_EXPORT_METHOD(startUpload:(NSDictionary *)options resolve:(RCTPromiseResolve
                 [request setValue:val forHTTPHeaderField:key];
             }
         }];
+        
+        NSURLSessionDownloadTask *uploadTask;
+        
+        if([method isEqualToString:@"POST"] || [method isEqualToString:@"PUT"]){
+            NSString *uuidStr = [[NSUUID UUID] UUIDString];
+            [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", uuidStr] forHTTPHeaderField:@"Content-Type"];
+            
+            NSMutableData *httpBody = [NSMutableData data];
+            
+            [parameters enumerateKeysAndObjectsUsingBlock:^(NSString *parameterKey, NSString *parameterValue, BOOL *stop) {
+                [httpBody appendData:[[NSString stringWithFormat:@"--%@\r\n", uuidStr] dataUsingEncoding:NSUTF8StringEncoding]];
+                [httpBody appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"%@\"\r\n\r\n", parameterKey] dataUsingEncoding:NSUTF8StringEncoding]];
+                [httpBody appendData:[[NSString stringWithFormat:@"%@\r\n", parameterValue] dataUsingEncoding:NSUTF8StringEncoding]];
+            }];
+            
+            [httpBody appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+            
+            [httpBody appendData:[[NSString stringWithFormat:@"--%@--\r\n", uuidStr] dataUsingEncoding:NSUTF8StringEncoding]];
 
-        NSURLSessionDataTask *uploadTask;
-
-        uploadTask = [[self urlSession] uploadTaskWithRequest:request fromData: nil];
-
+            [request setHTTPBody: httpBody];
+        }
+            
+        uploadTask = [[self urlSession] downloadTaskWithRequest:request];
+        
         uploadTask.taskDescription = customUploadId ? customUploadId : [NSString stringWithFormat:@"%i", thisUploadId];
-
+        
         [uploadTask resume];
         resolve(uploadTask.taskDescription);
     }
@@ -125,10 +156,10 @@ RCT_EXPORT_METHOD(cancelUpload: (NSString *)cancelUploadId resolve:(RCTPromiseRe
 - (NSURLSession *)urlSession {
     if (_urlSession == nil) {
         NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:BACKGROUND_SESSION_ID];
-        sessionConfiguration.waitsForConnectivity = YES; 
+        sessionConfiguration.waitsForConnectivity = YES;
         _urlSession = [NSURLSession sessionWithConfiguration:sessionConfiguration delegate:self delegateQueue:nil];
     }
-
+    
     return _urlSession;
 }
 
@@ -153,7 +184,7 @@ didCompleteWithError:(NSError *)error {
     } else {
         [data setObject:[NSNull null] forKey:@"responseBody"];
     }
-
+    
     if (error == nil)
     {
         [self _sendEventWithName:@"RNFileUploader-completed" body:data];
